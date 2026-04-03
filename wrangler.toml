@@ -1,0 +1,35 @@
+name = "cf-ai-postmortem"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = [ "nodejs_compat" ]
+
+[ai]
+binding = "AI"
+
+[[durable_objects.bindings]]
+name = "INCIDENT_SESSION"
+class_name = "IncidentSession"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = [ "IncidentSession" ]
+
+[[workflows]]
+name = "postmortem-generator"
+binding = "POSTMORTEM_WORKFLOW"
+class_name = "PostmortemWorkflow"
+
+[[kv_namespaces]]
+binding = "POSTMORTEMS_KV"
+id = "9c61fa16feab48218eddbbaeffce088a"
+
+[[r2_buckets]]
+binding = "POSTMORTEMS_R2"
+bucket_name = "postmortems"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[vars]
+ENVIRONMENT = "production"

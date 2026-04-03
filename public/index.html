@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Postmortem Assistant</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #242736;
+      --border: #2e3148;
+      --text: #e2e4f0;
+      --text-muted: #7b80a0;
+      --accent: #6c63ff;
+      --accent-dim: #3d3980;
+      --sev1: #ff4757;
+      --sev2: #ff6b35;
+      --sev3: #ffd32a;
+      --sev4: #2ed573;
+      --green: #2ed573;
+      --radius: 12px;
+      --radius-sm: 6px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }
+    header span { font-size: 12px; color: var(--text-muted); }
+    #session-badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 100px;
+      background: var(--surface2);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+
+    /* ── Main layout ── */
+    main {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ── Chat pane ── */
+    #chat-pane {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 0;
+    }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      scroll-behavior: smooth;
+    }
+
+    .msg {
+      display: flex;
+      gap: 12px;
+      max-width: 720px;
+      animation: fadeUp 0.2s ease;
+    }
+    .msg.user { flex-direction: row-reverse; align-self: flex-end; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+      align-self: flex-end;
+    }
+    .msg.assistant .avatar { background: var(--accent-dim); }
+    .msg.user .avatar { background: var(--surface2); border: 1px solid var(--border); }
+
+    .bubble {
+      padding: 11px 15px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      line-height: 1.6;
+      max-width: 600px;
+    }
+    .msg.assistant .bubble {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 3px;
+    }
+    .msg.user .bubble {
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      border-bottom-right-radius: 3px;
+    }
+
+    .typing {
+      display: flex;
+      gap: 5px;
+      padding: 14px 15px;
+    }
+    .typing span {
+      width: 7px; height: 7px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      animation: bounce 1.2s infinite;
+    }
+    .typing span:nth-child(2) { animation-delay: 0.15s; }
+    .typing span:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); }
+      40% { transform: translateY(-6px); }
+    }
+
+    /* ── Input bar ── */
+    #input-bar {
+      padding: 14px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 10px;
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+
+    #msg-input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 14px;
+      padding: 10px 14px;
+      resize: none;
+      font-family: inherit;
+      line-height: 1.5;
+      max-height: 120px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    #msg-input:focus { border-color: var(--accent); }
+    #msg-input::placeholder { color: var(--text-muted); }
+
+    #send-btn {
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius-sm);
+      color: white;
+      font-size: 20px;
+      width: 42px;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      align-self: flex-end;
+      height: 42px;
+    }
+    #send-btn:disabled { opacity: 0.4; cursor: default; }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      width: 280px;
+      border-left: 1px solid var(--border);
+      background: var(--surface);
+      overflow-y: auto;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .sidebar-section {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-section h3 {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    /* Progress */
+    #progress-bar-wrap {
+      background: var(--surface2);
+      border-radius: 100px;
+      height: 6px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    #progress-bar {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 100px;
+      transition: width 0.4s ease;
+      width: 0%;
+    }
+    #progress-label {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Fields list */
+    .field-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 0;
+      font-size: 13px;
+    }
+    .field-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .field-dot.filled { background: var(--green); }
+    .field-dot.missing { background: var(--border); }
+    .field-name { color: var(--text-muted); flex: 1; }
+    .field-name.filled { color: var(--text); }
+    .field-val {
+      font-size: 11px;
+      color: var(--text-muted);
+      max-width: 100px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Severity badge */
+    .sev-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+    .sev-SEV1 { background: var(--sev1); color: white; }
+    .sev-SEV2 { background: var(--sev2); color: white; }
+    .sev-SEV3 { background: var(--sev3); color: #111; }
+    .sev-SEV4 { background: var(--sev4); color: #111; }
+
+    .session-id-copy {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+      word-break: break-all;
+    }
+
+    /* Report bubble */
+    .report-bubble {
+      background: var(--surface2);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      font-size: 13px;
+      line-height: 1.7;
+      max-width: 100%;
+      width: 100%;
+      overflow-x: auto;
+    }
+    .report-bubble h1 { font-size: 18px; margin-bottom: 12px; color: var(--text); }
+    .report-bubble h2 { font-size: 15px; margin: 16px 0 6px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+    .report-bubble h3 { font-size: 13px; margin: 12px 0 4px; color: var(--text); }
+    .report-bubble p { margin-bottom: 8px; color: var(--text); }
+    .report-bubble table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 12px; }
+    .report-bubble th, .report-bubble td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+    .report-bubble th { background: var(--surface); color: var(--text-muted); }
+    .report-bubble strong { color: var(--text); }
+    .report-bubble code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+    .report-bubble hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+    .report-bubble ul, .report-bubble ol { margin: 6px 0 6px 18px; }
+    .report-bubble li { margin-bottom: 3px; }
+    .report-actions { display: flex; gap: 8px; margin-top: 14px; }
+    .report-copy-btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 7px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: opacity 0.15s;
+    }
+    .report-copy-btn:hover { opacity: 0.85; }
+    .report-msg { max-width: 100% !important; width: 100%; }
+
+    /* Connection status */
+    #conn-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .conn-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--border);
+    }
+    .conn-dot.connected { background: var(--green); }
+    .conn-dot.error { background: var(--sev1); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span style="font-size:20px">📋</span>
+    <div>
+      <h1>Postmortem Assistant</h1>
+      <span>Powered by Llama 3.3 on Workers AI</span>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div id="conn-status">
+      <div class="conn-dot" id="conn-dot"></div>
+      <span id="conn-label">Connecting...</span>
+    </div>
+    <span id="session-badge">—</span>
+  </div>
+</header>
+
+<main>
+  <div id="chat-pane">
+    <div id="messages"></div>
+    <div id="input-bar">
+      <textarea
+        id="msg-input"
+        placeholder="Describe what happened..."
+        rows="1"
+        disabled
+      ></textarea>
+      <button id="send-btn" disabled title="Send">↑</button>
+    </div>
+  </div>
+
+  <div id="sidebar">
+    <div class="sidebar-section">
+      <h3>Progress</h3>
+      <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+      <div id="progress-label">0 of 8 required fields</div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Incident Details</h3>
+      <div id="fields-list"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="session-id-copy" id="session-id-display"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const REQUIRED_FIELDS = [
+  { key: "title", label: "Title" },
+  { key: "severity", label: "Severity" },
+  { key: "startTime", label: "Start time" },
+  { key: "endTime", label: "End time" },
+  { key: "affectedSystems", label: "Affected systems" },
+  { key: "userImpact", label: "User impact" },
+  { key: "rootCause", label: "Root cause" },
+  { key: "triggerEvent", label: "Trigger event" },
+];
+
+const WORKER_URL = "https://cf-ai-postmortem.ashwikakatiyar.workers.dev"; 
+
+let ws = null;
+let sessionId = null;
+let currentSchema = {};
+let isSending = false;
+
+const messagesEl = document.getElementById("messages");
+const inputEl = document.getElementById("msg-input");
+const sendBtn = document.getElementById("send-btn");
+const connDot = document.getElementById("conn-dot");
+const connLabel = document.getElementById("conn-label");
+const sessionBadge = document.getElementById("session-badge");
+const progressBar = document.getElementById("progress-bar");
+const progressLabel = document.getElementById("progress-label");
+const fieldsList = document.getElementById("fields-list");
+const sessionIdDisplay = document.getElementById("session-id-display");
+
+// ── Init ──
+async function init() {
+  // Always create a fresh session on page load
+  const res = await fetch(`${WORKER_URL}/api/session`, { method: "POST" });
+  const data = await res.json();
+  sessionId = data.sessionId;
+
+  sessionBadge.textContent = sessionId.slice(0, 8) + "...";
+  sessionIdDisplay.textContent = "Session: " + sessionId;
+
+  connectWS();
+  renderFields({});
+}
+
+function connectWS() {
+  const wsUrl = (WORKER_URL || window.location.origin)
+    .replace("https://", "wss://")
+    .replace("http://", "ws://");
+
+  ws = new WebSocket(`${wsUrl}/api/session/${sessionId}/ws`);
+
+  ws.onopen = () => {
+    connDot.className = "conn-dot connected";
+    connLabel.textContent = "Connected";
+    inputEl.disabled = false;
+    sendBtn.disabled = false;
+    inputEl.focus();
+  };
+
+  ws.onclose = () => {
+    connDot.className = "conn-dot error";
+    connLabel.textContent = "Disconnected – retrying...";
+    inputEl.disabled = true;
+    sendBtn.disabled = true;
+    setTimeout(connectWS, 3000);
+  };
+
+  ws.onerror = () => {
+    connDot.className = "conn-dot error";
+    connLabel.textContent = "Connection error";
+  };
+
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    handleServerMessage(data);
+  };
+}
+
+function handleServerMessage(data) {
+  switch (data.type) {
+    case "state":
+      // Full state on reconnect - replay messages
+      if (data.session) {
+        messagesEl.innerHTML = "";
+        data.session.messages.forEach(m => {
+          if (m.isReport) {
+            appendReport(m.content);
+          } else {
+            appendMessage(m.role, m.content);
+          }
+        });
+        currentSchema = data.session.schema || {};
+        renderFields(currentSchema);
+        if (data.session.complete) {
+          showComplete();
+        }
+      }
+      break;
+
+    case "message":
+      removeTypingIndicator();
+      if (data.isReport) {
+        appendReport(data.message.content);
+        showComplete();
+      } else {
+        appendMessage(data.message.role, data.message.content);
+      }
+      if (data.schema) {
+        currentSchema = data.schema;
+        renderFields(currentSchema);
+      }
+      isSending = false;
+      sendBtn.disabled = false;
+      inputEl.focus();
+      break;
+
+    case "typing":
+      showTypingIndicator();
+      break;
+
+    case "generating":
+      removeTypingIndicator();
+      showGeneratingState();
+      break;
+
+    case "error":
+      removeTypingIndicator();
+      appendMessage("assistant", "⚠️ " + data.message);
+      isSending = false;
+      sendBtn.disabled = false;
+      break;
+  }
+}
+
+function renderMarkdown(text) {
+  return text
+    // Escape HTML first
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    // Italic
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    // Inline code
+    .replace(/`([^`]+)`/g, "<code style='background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:3px;font-size:12px'>$1</code>")
+    // Bullet lists (lines starting with * or -)
+    .replace(/^[*-] (.+)$/gm, "<li>$1</li>")
+    .replace(/(<li>[\s\S]+?<\/li>)/g, "<ul style='margin:6px 0 6px 16px'>$1</ul>")
+    // Headers
+    .replace(/^### (.+)$/gm, "<strong style='display:block;margin-top:10px'>$1</strong>")
+    .replace(/^## (.+)$/gm, "<strong style='display:block;margin-top:12px;font-size:15px'>$1</strong>")
+    .replace(/^# (.+)$/gm, "<strong style='display:block;margin-top:12px;font-size:16px'>$1</strong>")
+    // Newlines
+    .replace(/\n/g, "<br>");
+}
+
+function appendMessage(role, content) {
+  const div = document.createElement("div");
+  div.className = `msg ${role}`;
+
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  avatar.textContent = role === "assistant" ? "🤖" : "👤";
+
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  if (role === "assistant") {
+    bubble.innerHTML = renderMarkdown(content);
+  } else {
+    bubble.textContent = content;
+  }
+
+  div.appendChild(avatar);
+  div.appendChild(bubble);
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function appendReport(markdown) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "msg assistant report-msg";
+
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  avatar.textContent = "🤖";
+
+  const bubble = document.createElement("div");
+  bubble.className = "report-bubble";
+  bubble.innerHTML = renderMarkdownFull(markdown);
+
+  // Copy button
+  const actions = document.createElement("div");
+  actions.className = "report-actions";
+  const copyBtn = document.createElement("button");
+  copyBtn.className = "report-copy-btn";
+  copyBtn.textContent = "📋 Copy Markdown";
+  copyBtn.onclick = () => {
+    navigator.clipboard.writeText(markdown).then(() => {
+      copyBtn.textContent = "✓ Copied!";
+      setTimeout(() => copyBtn.textContent = "📋 Copy Markdown", 2000);
+    });
+  };
+  actions.appendChild(copyBtn);
+  bubble.appendChild(actions);
+
+  wrapper.appendChild(avatar);
+  wrapper.appendChild(bubble);
+  messagesEl.appendChild(wrapper);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function renderMarkdownFull(text) {
+  // Escape HTML
+  let html = text
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  // Tables: | col | col |
+  html = html.replace(/(\|.+\|\n?)+/g, (match) => {
+    const rows = match.trim().split("\n").filter(r => r.trim());
+    let tableHtml = "<table>";
+    rows.forEach((row, i) => {
+      if (/^\|[-:| ]+\|$/.test(row.trim())) return; // separator row
+      const cells = row.split("|").filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+      const tag = i === 0 ? "th" : "td";
+      tableHtml += "<tr>" + cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join("") + "</tr>";
+    });
+    return tableHtml + "</table>";
+  });
+
+  // Headers
+  html = html
+    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
+    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
+    // HR
+    .replace(/^---$/gm, "<hr>")
+    // Bold/italic
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    // Inline code
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    // Numbered lists
+    .replace(/^(\d+)\. (.+)$/gm, "<li>$2</li>")
+    // Bullet lists
+    .replace(/^[*-] (.+)$/gm, "<li>$1</li>")
+    // Wrap consecutive <li> in <ul>
+    .replace(/(<li>.*<\/li>\n?)+/g, m => `<ul>${m}</ul>`)
+    // Paragraphs (double newline)
+    .replace(/\n\n/g, "</p><p>")
+    .replace(/\n/g, "<br>");
+
+  return `<p>${html}</p>`;
+}
+
+function showComplete() {
+  progressBar.style.width = "100%";
+  progressBar.style.background = "var(--green)";
+  progressLabel.textContent = "Complete!";
+}
+
+
+function showTypingIndicator() {
+  removeTypingIndicator();
+  const div = document.createElement("div");
+  div.className = "msg assistant";
+  div.id = "typing-indicator";
+
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  avatar.textContent = "🤖";
+
+  const bubble = document.createElement("div");
+  bubble.className = "bubble typing";
+  bubble.innerHTML = "<span></span><span></span><span></span>";
+
+  div.appendChild(avatar);
+  div.appendChild(bubble);
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function removeTypingIndicator() {
+  document.getElementById("typing-indicator")?.remove();
+}
+
+function sendMessage() {
+  const content = inputEl.value.trim();
+  if (!content || isSending || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+  isSending = true;
+  sendBtn.disabled = true;
+  appendMessage("user", content);
+  inputEl.value = "";
+  inputEl.style.height = "auto";
+
+  ws.send(JSON.stringify({ type: "message", content }));
+}
+
+function renderFields(schema) {
+  fieldsList.innerHTML = "";
+  let filled = 0;
+
+  REQUIRED_FIELDS.forEach(({ key, label }) => {
+    const val = schema[key];
+    const isFilled = val !== null && val !== undefined && !(Array.isArray(val) && val.length === 0);
+    if (isFilled) filled++;
+
+    const row = document.createElement("div");
+    row.className = "field-row";
+
+    const dot = document.createElement("div");
+    dot.className = `field-dot ${isFilled ? "filled" : "missing"}`;
+
+    const name = document.createElement("div");
+    name.className = `field-name ${isFilled ? "filled" : ""}`;
+    name.textContent = label;
+
+    const valEl = document.createElement("div");
+    valEl.className = "field-val";
+
+    if (isFilled) {
+      if (key === "severity") {
+        const badge = document.createElement("span");
+        badge.className = `sev-badge sev-${val}`;
+        badge.textContent = val;
+        valEl.appendChild(badge);
+      } else if (Array.isArray(val)) {
+        valEl.textContent = val.join(", ");
+      } else if (typeof val === "string" && val.includes("T")) {
+        // ISO date - show readable
+        valEl.textContent = new Date(val).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      } else {
+        valEl.textContent = val;
+      }
+    }
+
+    row.appendChild(dot);
+    row.appendChild(name);
+    row.appendChild(valEl);
+    fieldsList.appendChild(row);
+  });
+
+  const pct = Math.round((filled / REQUIRED_FIELDS.length) * 100);
+  progressBar.style.width = pct + "%";
+  progressLabel.textContent = `${filled} of ${REQUIRED_FIELDS.length} required fields`;
+}
+
+function showGeneratingState() {
+  progressBar.style.background = "#ffd32a";
+  progressLabel.textContent = "Generating document...";
+}
+
+// ── Event listeners ──
+sendBtn.addEventListener("click", sendMessage);
+
+inputEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+inputEl.addEventListener("input", () => {
+  inputEl.style.height = "auto";
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + "px";
+});
+
+init();
+</script>
+<script src="https://unpkg.com/lucide@latest"></script>
+</body>
+</html>
