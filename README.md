@@ -2,7 +2,7 @@
 
 An AI-powered incident postmortem generator built on Cloudflare's AI stack.
 
-Describe your incident in plain English. The assistant interviews you with targeted follow-up questions, extracts structured data in real time, then generates a polished postmortem report.
+Describe your incident in plain English. The assistant interviews you with targeted follow-up questions, extracts structured data in real time, then generates a polished postmortem markdown document.
 
 ## Architecture
 
