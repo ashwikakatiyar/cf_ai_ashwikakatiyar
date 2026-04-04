@@ -2,7 +2,7 @@
 
 An AI-powered incident postmortem generator built on Cloudflare's AI stack.
 
-Describe your incident in plain English. The assistant interviews you with targeted follow-up questions, extracts structured data in real time, then generates a polished postmortem Markdown document.
+Describe your incident in plain English. The assistant interviews you with targeted follow-up questions, extracts structured data in real time, then generates a polished postmortem markdown document.
 
 ## Architecture
 
@@ -14,39 +14,8 @@ Describe your incident in plain English. The assistant interviews you with targe
 | Storage | KV + R2 | KV for index/metadata, R2 for Markdown download |
 | Frontend | Static HTML | Real-time chat UI with live field progress sidebar |
 
-## Setup
-
-### 1. Install dependencies
-
-```bash
-npm install
-wrangler login
-```
-
-### 2. Create infrastructure
-
-```bash
-wrangler kv namespace create POSTMORTEMS_KV
-# paste the id into wrangler.toml
-
-wrangler r2 bucket create postmortems
-```
-
-### 3. Run locally
-
-```bash
-wrangler dev
-```
-
-Open http://localhost:8787
-
-### 4. Deploy
-
-```bash
-wrangler deploy
-```
-
-Update WORKER_URL in public/index.html before deploying the frontend.
+## Deployed URL
+[https://cf-ai-postmortem.ashwikakatiyar.workers.dev](https://cf-ai-postmortem.ashwikakatiyar.workers.dev)
 
 ## How it works
 
