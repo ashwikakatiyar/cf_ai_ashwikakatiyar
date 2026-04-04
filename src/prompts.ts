@@ -30,7 +30,7 @@ const QUESTIONS: Partial<Record<keyof PostmortemSchema, string>> = {
 /** Returns the next interview question for the first missing required field. */
 export function getNextQuestion(schema: PostmortemSchema): string {
   const missing = getMissingFields(schema);
-  if (missing.length === 0) return "I have everything I need! Generating your postmortem now...";
+  if (missing.length === 0) return "I have everything I need! Would you like to generate your report now?";
   const next = missing[0] as keyof PostmortemSchema;
   return QUESTIONS[next] ?? `Can you tell me more about ${String(next)}?`;
 }

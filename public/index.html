@@ -8,19 +8,19 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #0f1117;
-      --surface: #1a1d27;
-      --surface2: #242736;
-      --border: #2e3148;
-      --text: #e2e4f0;
-      --text-muted: #7b80a0;
-      --accent: #6c63ff;
-      --accent-dim: #3d3980;
+      --bg: #f1e8e5;
+      --surface: #dec9c2;
+      --surface2: #dec9c2;
+      --border: #531703;
+      --text: #1a0701;
+      --text-muted: #1f110d;
+      --accent: #f38020;
+      --accent-dim: #d97706;
       --sev1: #ff4757;
       --sev2: #ff6b35;
       --sev3: #ffd32a;
       --sev4: #2ed573;
-      --green: #2ed573;
+      --green: #18b65a;
       --radius: 12px;
       --radius-sm: 6px;
     }
@@ -306,6 +306,10 @@
     .report-bubble li { margin-bottom: 3px; }
     .report-actions { display: flex; gap: 8px; margin-top: 14px; }
     .report-copy-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
       background: var(--accent);
       color: white;
       border: none;
@@ -340,7 +344,7 @@
 
 <header>
   <div style="display:flex;align-items:center;gap:10px">
-    <span style="font-size:20px">📋</span>
+    <i data-lucide="clipboard-list"></i>
     <div>
       <h1>Postmortem Assistant</h1>
       <span>Powered by Llama 3.3 on Workers AI</span>
@@ -386,7 +390,6 @@
     </div>
   </div>
 </main>
-
 <script>
 const REQUIRED_FIELDS = [
   { key: "title", label: "Title" },
@@ -429,6 +432,7 @@ async function init() {
 
   connectWS();
   renderFields({});
+  lucide.createIcons();
 }
 
 function connectWS() {
@@ -463,6 +467,7 @@ function connectWS() {
     const data = JSON.parse(event.data);
     handleServerMessage(data);
   };
+  lucide.createIcons();
 }
 
 function handleServerMessage(data) {
@@ -519,6 +524,7 @@ function handleServerMessage(data) {
       sendBtn.disabled = false;
       break;
   }
+  lucide.createIcons();
 }
 
 function renderMarkdown(text) {
@@ -540,6 +546,7 @@ function renderMarkdown(text) {
     .replace(/^# (.+)$/gm, "<strong style='display:block;margin-top:12px;font-size:16px'>$1</strong>")
     // Newlines
     .replace(/\n/g, "<br>");
+    lucide.createIcons();
 }
 
 function appendMessage(role, content) {
@@ -548,7 +555,9 @@ function appendMessage(role, content) {
 
   const avatar = document.createElement("div");
   avatar.className = "avatar";
-  avatar.textContent = role === "assistant" ? "🤖" : "👤";
+  avatar.innerHTML = role === "assistant" ? '<i data-lucide="bot"></i>' : '<i data-lucide="user"></i>';
+
+lucide.createIcons();
 
   const bubble = document.createElement("div");
   bubble.className = "bubble";
@@ -562,6 +571,7 @@ function appendMessage(role, content) {
   div.appendChild(bubble);
   messagesEl.appendChild(div);
   messagesEl.scrollTop = messagesEl.scrollHeight;
+  lucide.createIcons();
 }
 
 function appendReport(markdown) {
@@ -570,7 +580,7 @@ function appendReport(markdown) {
 
   const avatar = document.createElement("div");
   avatar.className = "avatar";
-  avatar.textContent = "🤖";
+  avatar.innerHTML = '<i data-lucide="bot"></i>';
 
   const bubble = document.createElement("div");
   bubble.className = "report-bubble";
@@ -581,11 +591,12 @@ function appendReport(markdown) {
   actions.className = "report-actions";
   const copyBtn = document.createElement("button");
   copyBtn.className = "report-copy-btn";
-  copyBtn.textContent = "📋 Copy Markdown";
+  copyBtn.innerHTML = '<i data-lucide="clipboard" data-size="10"></i> Copy Markdown';
+  lucide.createIcons();  
   copyBtn.onclick = () => {
     navigator.clipboard.writeText(markdown).then(() => {
       copyBtn.textContent = "✓ Copied!";
-      setTimeout(() => copyBtn.textContent = "📋 Copy Markdown", 2000);
+      setTimeout(() => copyBtn.innerHTML = '<i data-lucide="clipboard" data-size="10"></i> Copy Markdown', 2000);
     });
   };
   actions.appendChild(copyBtn);
@@ -595,6 +606,7 @@ function appendReport(markdown) {
   wrapper.appendChild(bubble);
   messagesEl.appendChild(wrapper);
   messagesEl.scrollTop = messagesEl.scrollHeight;
+  lucide.createIcons();
 }
 
 function renderMarkdownFull(text) {
@@ -638,12 +650,14 @@ function renderMarkdownFull(text) {
     .replace(/\n/g, "<br>");
 
   return `<p>${html}</p>`;
+  lucide.createIcons();
 }
 
 function showComplete() {
   progressBar.style.width = "100%";
   progressBar.style.background = "var(--green)";
   progressLabel.textContent = "Complete!";
+  lucide.createIcons();
 }
 
 
@@ -655,7 +669,7 @@ function showTypingIndicator() {
 
   const avatar = document.createElement("div");
   avatar.className = "avatar";
-  avatar.textContent = "🤖";
+  avatar.innerHTML = '<i data-lucide="bot"></i>';
 
   const bubble = document.createElement("div");
   bubble.className = "bubble typing";
@@ -665,10 +679,12 @@ function showTypingIndicator() {
   div.appendChild(bubble);
   messagesEl.appendChild(div);
   messagesEl.scrollTop = messagesEl.scrollHeight;
+  lucide.createIcons();
 }
 
 function removeTypingIndicator() {
   document.getElementById("typing-indicator")?.remove();
+  lucide.createIcons();
 }
 
 function sendMessage() {
@@ -682,6 +698,7 @@ function sendMessage() {
   inputEl.style.height = "auto";
 
   ws.send(JSON.stringify({ type: "message", content }));
+  lucide.createIcons();
 }
 
 function renderFields(schema) {
@@ -731,11 +748,13 @@ function renderFields(schema) {
   const pct = Math.round((filled / REQUIRED_FIELDS.length) * 100);
   progressBar.style.width = pct + "%";
   progressLabel.textContent = `${filled} of ${REQUIRED_FIELDS.length} required fields`;
+  lucide.createIcons();
 }
 
 function showGeneratingState() {
   progressBar.style.background = "#ffd32a";
   progressLabel.textContent = "Generating document...";
+  lucide.createIcons();
 }
 
 // ── Event listeners ──
@@ -754,6 +773,7 @@ inputEl.addEventListener("input", () => {
 });
 
 init();
+lucide.createIcons();
 </script>
 <script src="https://unpkg.com/lucide@latest"></script>
 </body>

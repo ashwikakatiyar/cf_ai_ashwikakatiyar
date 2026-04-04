@@ -87,7 +87,7 @@ export class IncidentSession implements DurableObject {
   }
 
   private async sendOpeningMessage(ws: WebSocket) {
-    const opening = "Hi! I'm here to help you write this postmortem while the details are fresh. To start — can you give me a brief description of what happened?";
+    const opening = "Hi! I'm here to help you write this postmortem while the details are fresh. To start, can you give me a brief description of what happened?";
 
     const session = await this.state.storage.get<SessionState>("session")!;
     const assistantMsg: ChatMessage = {
@@ -114,7 +114,7 @@ export class IncidentSession implements DurableObject {
         type: "message",
         message: {
           role: "assistant",
-          content: "Your postmortem has already been generated! Scroll up to see the full report.",
+          content: "Your postmortem report has been generated! Please wait a minute.",
           timestamp: Date.now(),
         }
       }));
@@ -235,9 +235,6 @@ export class IncidentSession implements DurableObject {
     ]);
 
     const rawReply = (chatResponse as { response: string }).response.trim();
-    const reply = (isReportLike(rawReply) || isTruncated(rawReply))
-      ? getNextQuestion(session.schema)
-      : rawReply;
 
     // Parse the extraction response
     const extractBody = (extractResponse as any)?.response;
@@ -254,6 +251,20 @@ export class IncidentSession implements DurableObject {
           // extraction failed - proceed with empty patch
         }
       }
+    }
+
+    const updatedSchema = { ...session.schema, ...schemaPatch };
+    const missingAfterPatch = getMissingFields(updatedSchema);
+    const reply = (isReportLike(rawReply) || isTruncated(rawReply))
+      ? getNextQuestion(updatedSchema)
+      : rawReply;
+
+    if (missingAfterPatch.length === 0) {
+      return {
+        reply: getNextQuestion(updatedSchema),
+        schemaPatch,
+        complete: true,
+      };
     }
 
     return { reply, schemaPatch, complete: false };

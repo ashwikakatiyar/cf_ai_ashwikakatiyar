@@ -50,4 +50,4 @@ Update WORKER_URL in public/index.html before deploying the frontend.
 
 ## How it works
 
-The LLM receives the postmortem schema as structured JSON in its system prompt and returns a JSON object on every turn containing a natural language reply and a schema patch. The Durable Object applies the patch and triggers the Workflow once all 8 required fields are filled.
+The Durable Object sends the full conversation history and the current schema to the LLM. It uses one LLM call for a natural language assistant reply and a second focused extraction call to infer a JSON schema patch from the latest user message. The Durable Object merges that patch into session state, marks the session complete when all required fields are present, generates the postmortem markdown inline, and fires a best-effort Workflow trigger for downstream storage and processing.
